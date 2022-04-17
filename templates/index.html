@@ -15,9 +15,7 @@
         <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
 
         <link rel="preconnect" href="https://fonts.gstatic.com">
-        <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">            
-        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css" rel="stylesheet">       
-        
+        <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">    
         <script type="text/javascript"
                 src="https://openapi.map.naver.com/openapi/v3/maps.js?ncpClientId=49tdbelq95&submodules=geocoder"></script>
 
@@ -25,6 +23,7 @@
         <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"
               integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm"
               crossorigin="anonymous">
+        <link href="//maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
 
         <!-- Optional JavaScript -->
         <!-- jQuery first, then Popper.js, then Bootstrap JS -->
@@ -108,40 +107,30 @@
 
             function make_card(i, matjip) { // 카드 만들어서 append 하는 것을 함수로 만들어주기. 
                 // 따옴표가 아닌 백틱을 쓰는 이유는, 자바스크립트 변수를 temp_html 에 넣어줄 것이기 때문이다. 
-                let temp_html = `<div class="card" id="card-${i}">
+                let temp_html = ``;
+                if ('liked' in matjip) { // matjip db 에 liked 필드가 존재 할때. 이건 좋아요가 등록이 된건만 liked 필드가 존재할 것이다. 
+                    // bookmark 클릭 함수 시 3개를 넘겨준다. 이미 like 된 태그이기 때문에 unlike 클릭시 unlike 를 넘겨준다.
+                    temp_html = `<div class="card" id="card-${i}">
                                     <div class="card-body">
                                         <h5 class="card-title"><a href="javascript:click2center(${i})" class="matjip-title">${matjip.title}</a></h5>
                                         <h6 class="card-subtitle mb-2 text-muted">${matjip.category}</h6>
-                                        {% if ${matjip.bookmark_status} != 'bookmark' %}
-                                            <button id='bookmark' onclick="bookmark_save(${i})"><i class="fa-solid fa-bookmark"></i></button>
-                                        {% else %}
-                                            <button id='bookmark'><i class="fa-solid fa-face-grin"></i></button>
-                                        {% endif %}                                        
+                                        <i class ="fa fa-bookmark" onclick="bookmark('${matjip.title}', '${matjip.address}', 'unlike')"></i>
                                         <p class="card-text">${matjip.address}</p>
                                         <p class="card-text" style="color:blue;">${matjip.show}</p>
                                     </div>
                                 </div>`;
+                } else {
+                    temp_html = `<div class="card" id="card-${i}">
+                                    <div class="card-body">
+                                        <h5 class="card-title"><a href="javascript:click2center(${i})" class="matjip-title">${matjip.title}</a></h5>
+                                        <h6 class="card-subtitle mb-2 text-muted">${matjip.category}</h6>
+                                        <i class ="fa fa-bookmark-o" onclick="bookmark('${matjip.title}', '${matjip.address}', 'like')"></i>
+                                        <p class="card-text">${matjip.address}</p>
+                                        <p class="card-text" style="color:blue;">${matjip.show}</p>
+                                    </div>
+                                </div>`;
+                }
                 $('#matjip-box').append(temp_html);
-            }
-
-            function bookmark_save(${matjip.title}) {
-                // ++ 버튼 아이디 : bookmark 클릭 시 해당 마커 선택
-                
-                $.ajax({
-                    type: "POST",
-                    url: "/api/save_bookmark",
-                    data: { 
-                        bookmark_give: 'bookmark',
-                        index_give : matjip.title 
-                    },
-                    success: function (response) {
-                      alert(response["msg"]);
-                      window.location.reload()
-                    }
-                  });
-          
-                // ++ 해당 마커에 bookmark 필드에 check 저장 (몽고DB)
-                
             }
 
             function get_matjips() { // GET 으로 가져온 맛집 데이터를 하나씩 꺼내서 변수에 저장 시키기
@@ -155,9 +144,8 @@
                         for (let i = 0; i < matjips.length; i++) {
                             let matjip = matjips[i]
                             console.log(matjip)
-                            let bookmark = matjip['bookmark_status']
                             make_card(i, matjip);
-                            let marker = make_marker(matjip, bookmark); // make_card 로 카드를 만들어 준 뒤에 마커를 바로 만들어 주자. 마커를 만들어 주는 make_marker 는 아래에 함수로 만들어져 있음.                      
+                            let marker = make_marker(matjip); // make_card 로 카드를 만들어 준 뒤에 마커를 바로 만들어 주자. 마커를 만들어 주는 make_marker 는 아래에 함수로 만들어져 있음.                      
                             add_info(i, marker, matjip); // i번째 식당 정보에 해당하는 marker 와 거기에 해당 matjip 정보를 넣는다. 
                         }
                     }
@@ -165,15 +153,18 @@
             }
 
 
-            function make_marker(matjip, bookmark) {
+            function make_marker(matjip) {
+                let marker_img = '';
+                if ("liked" in matjip) {
+                    marker_img = '{{ url_for("static", filename = "marker-liked.png") }}'
+                } else {
+                    marker_img = '{{ url_for("static", filename = "marker-default.png") }}'
+                }
+                
                 let marker = new naver.maps.Marker({ // matjip 으로 받아오는 정보를 marker 변수로 실현하기
                     position: new naver.maps.LatLng(matjip["mapy"], matjip["mapx"]), // 어느 좌표를 보여줄 것이냐
-                    map: map // 어느 지도에 나타낼 것이냐
-                    if (bookmark == 'bookmark') {
-                        icon: "{{ url_for('static', filename='marker-liked.png') }}"
-                    } else {
-                        icon: "{{ url_for('static', filename='marker-default.png') }}"
-                    }
+                    map: map, // 어느 지도에 나타낼 것이냐
+                    icon : marker_img
                 });
                 markers.push(marker) // marker 들을 담기 위한 리시트 빈그릇을 전역 변수로 지정했었고, 하나씩 push 로 넣어줌. 전역 변수의 리스트로 만들어 줬기 때문에 다른 함수에서도 쓸 수 있게 됨. 
                 return marker // marker 는 나중에 infoWindows 에 쓰기 위해 return 으로 돌려받음
@@ -221,6 +212,23 @@
                 }
             }
 
+
+            function bookmark(title, address, action){
+                $.ajax({
+                    type: "POST",
+                    url : "/like_matjip",
+                    data : {
+                        title_give : title,
+                        address_give : address,
+                        action_give : action
+                    },
+                    success : function(response) {
+                        if (response['result'] == 'success') {
+                            get_matjips() // 업데이트 된 DB 에 맞게 다시 지도를 그려주기 위해 get_matjips() 를 다시 실행
+                        }
+                    }
+                })
+            }
         </script>
 
     </head>
@@ -233,11 +241,9 @@
                     <h1 class="title mt-5 mb-2">스파르타 맛집 지도</h1>
                 </div>
             </div>
-            <div id="map">
-                <!-- id map 은 네이버에 정한 약속으로 변경 불가 -->
-            </div> 
+            <div id="map"></div>
 
-            <div class="matjip-list" id="matjip-box">
+						<div class="matjip-list" id="matjip-box">
                 <div class="card" id="card-0">
                     <div class="card-body">
                         <h5 class="card-title"><a href="#" class="matjip-title">혼가츠</a></h5>
